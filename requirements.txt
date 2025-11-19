@@ -1,0 +1,7 @@
+SpeechRecognition>=3.8.1
+PyAudio>=0.2.11
+pyttsx3>=2.90
+win10toast>=0.9
+psutil>=5.9.0
+# Optional (for offline recognition with PocketSphinx)
+pocketsphinx>=0.1.15
