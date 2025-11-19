@@ -26,9 +26,11 @@ No runtime behavior or command mappings were changed — only reorganized for cl
 If optional dependencies are missing, the app falls back to text input and prints a notice in the UI.
 
 ## Run
-Run the existing `final.py` as before:
+Run the program using the new professional entrypoint `speak_shell.py` (a `final.py` wrapper is still available):
 
 ```bash
+python speak_shell.py
+# or for backward compatibility
 python final.py
 ```
 

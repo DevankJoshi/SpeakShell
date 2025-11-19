@@ -79,12 +79,12 @@ class HighAccuracyVoiceCMD:
         self.command_history = []
         self.activity_log = []
 
-    # Enhanced voice control parameters (exposed in UI)
-    self.phrase_time_limit = 7
-    self.listen_timeout = 10
-    self.energy_threshold = 300
-    # recognition engine: 'google' or 'sphinx' (if available)
-    self.recognition_engine = 'google'
+        # Enhanced voice control parameters (exposed in UI)
+        self.phrase_time_limit = 7
+        self.listen_timeout = 10
+        self.energy_threshold = 300
+        # recognition engine: 'google' or 'sphinx' (if available)
+        self.recognition_engine = 'google'
 
         # Track current working directory for navigation
         self.cwd = os.getcwd()
@@ -92,159 +92,195 @@ class HighAccuracyVoiceCMD:
         self.create_simple_gui()
 
     def create_simple_gui(self):
-        main_frame = tk.Frame(self.root, bg=self.bg_color)
-        main_frame.pack(fill='both', expand=True, padx=10, pady=10)
+        # Build a richer UI: menu, toolbar, output pane, history pane and controls
+        self.root.configure(bg=self.bg_color)
 
-        # Title
-        title_frame = tk.Frame(main_frame, bg=self.bg_color)
-        title_frame.pack(fill='x', pady=(0, 10))
+        # Menu
+        menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Save Log", command=self.save_log)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.root.destroy)
+        menubar.add_cascade(label="File", menu=file_menu)
 
-        title = tk.Label(
-            title_frame,
-            text="Speak Shell",
-            font=('Consolas', 12, 'bold'),
-            bg=self.bg_color,
-            fg=self.text_color
-        )
-        title.pack(side='left')
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="Toggle Theme", command=self.toggle_theme)
+        menubar.add_cascade(label="View", menu=view_menu)
 
-        # TTS toggle
-        tts_frame = tk.Frame(title_frame, bg=self.bg_color)
-        tts_frame.pack(side='right')
-        self.tts_var = tk.BooleanVar(value=self.tts_enabled)
-        self.tts_chk = tk.Checkbutton(
-            tts_frame, text="Voice Feedback",
-            variable=self.tts_var,
-            onvalue=True, offvalue=False,
-            bg=self.bg_color, fg=self.warn_fg,
-            selectcolor=self.bg_color,
-            activebackground=self.bg_color,
-            activeforeground=self.warn_fg,
-            font=('Consolas', 10)
-        )
-        self.tts_chk.pack(side='right', padx=5)
+        help_menu = tk.Menu(menubar, tearoff=0)
+        help_menu.add_command(label="About", command=lambda: messagebox.showinfo("About", "Speak Shell — Voice-assisted terminal"))
+        menubar.add_cascade(label="Help", menu=help_menu)
 
-        # Buttons
-        button_frame = tk.Frame(main_frame, bg=self.bg_color)
-        button_frame.pack(fill='x', pady=(0, 10))
+        self.root.config(menu=menubar)
 
-        if self.voice_enabled:
-            self.start_btn = tk.Button(
-                button_frame, text="Start Listening",
-                command=self.start_listening, font=('Consolas', 10),
-                bg=self.button_bg, fg=self.button_fg, width=15, relief='raised', bd=2
-            )
-            self.start_btn.pack(side='left', padx=5)
+        # Top toolbar
+        toolbar = tk.Frame(self.root, bg=self.bg_color)
+        toolbar.pack(fill='x', padx=6, pady=6)
 
-            self.stop_btn = tk.Button(
-                button_frame, text="Stop Listening",
-                command=self.stop_listening, font=('Consolas', 10),
-                bg=self.button_bg, fg='#FF0000', width=15, relief='raised', bd=2, state='disabled'
-            )
-            self.stop_btn.pack(side='left', padx=5)
-        else:
-            tk.Label(
-                button_frame,
-                text="Voice Disabled - Install: pip install SpeechRecognition pyaudio",
-                font=('Consolas', 10), bg=self.bg_color, fg=self.warn_fg
-            ).pack(side='left')
+        self.start_btn = tk.Button(toolbar, text="Start Listening", command=self.start_listening, bg=self.button_bg, fg=self.button_fg)
+        self.start_btn.pack(side='left', padx=4)
+        self.stop_btn = tk.Button(toolbar, text="Stop Listening", command=self.stop_listening, bg=self.button_bg, fg='#FF5555', state='disabled')
+        self.stop_btn.pack(side='left', padx=4)
+        tk.Button(toolbar, text="Calibrate Mic", command=self.calibrate_mic, bg=self.button_bg, fg=self.button_fg).pack(side='left', padx=4)
+        tk.Button(toolbar, text="Clear", command=self.clear_screen, bg=self.button_bg, fg=self.button_fg).pack(side='left', padx=4)
+        tk.Button(toolbar, text="Save Log", command=self.save_log, bg=self.button_bg, fg=self.button_fg).pack(side='left', padx=4)
 
-        clear_btn = tk.Button(
-            button_frame, text="Clear Screen",
-            command=self.clear_screen, font=('Consolas', 10),
-            bg=self.button_bg, fg=self.button_fg, width=15, relief='raised', bd=2
-        )
-        clear_btn.pack(side='left', padx=5)
+        # Engine selector and sliders
+        engine_frame = tk.Frame(toolbar, bg=self.bg_color)
+        engine_frame.pack(side='right')
+        tk.Label(engine_frame, text="Engine:", bg=self.bg_color, fg=self.text_color).pack(side='left')
+        self.engine_var = tk.StringVar(value=self.recognition_engine)
+        engines = ['google']
+        if sr is not None and hasattr(sr, 'Recognizer') and hasattr(sr, 'Recognizer') and hasattr(sr, 'AudioFile'):
+            # pocketsphinx detection heuristic
+            try:
+                import pocketsphinx  # type: ignore
+                engines.append('sphinx')
+            except Exception:
+                pass
+        self.engine_menu = tk.OptionMenu(engine_frame, self.engine_var, *engines)
+        self.engine_menu.config(bg=self.button_bg, fg=self.button_fg)
+        self.engine_menu.pack(side='left', padx=4)
 
-        save_btn = tk.Button(
-            button_frame, text="Save Log",
-            command=self.save_log, font=('Consolas', 10),
-            bg=self.button_bg, fg=self.button_fg, width=15, relief='raised', bd=2
-        )
-        save_btn.pack(side='left', padx=5)
+        # Main panes
+        content = tk.Frame(self.root, bg=self.bg_color)
+        content.pack(fill='both', expand=True, padx=8, pady=6)
 
-        # Status
-        status_frame = tk.Frame(main_frame, bg=self.bg_color)
-        status_frame.pack(fill='x', pady=(0, 10))
+        # Left: output + input
+        left = tk.Frame(content, bg=self.bg_color)
+        left.pack(side='left', fill='both', expand=True)
 
-        self.status_label = tk.Label(
-            status_frame,
-            text="Status: Ready",
-            font=('Consolas', 10), bg=self.bg_color, fg=self.ok_fg
-        )
-        self.status_label.pack(side='left')
+        self.output_text = scrolledtext.ScrolledText(left, wrap='word', font=('Consolas', 11), bg=self.bg_color, fg=self.text_color, insertbackground=self.text_color, relief='flat', padx=8, pady=8)
+        self.output_text.pack(fill='both', expand=True)
 
-        # Current directory label
-        self.cwd_label = tk.Label(
-            status_frame,
-            text=f"CWD: {self.cwd}",
-            font=('Consolas', 10), bg=self.bg_color, fg='#00CED1'
-        )
-        self.cwd_label.pack(side='right')
+        input_frame = tk.Frame(left, bg=self.bg_color)
+        input_frame.pack(fill='x', pady=(6,0))
+        tk.Label(input_frame, text=">", font=('Consolas', 12, 'bold'), bg=self.bg_color, fg=self.button_fg).pack(side='left', padx=(0,6))
+        self.input_entry = tk.Entry(input_frame, font=('Consolas', 12), bg=self.bg_color, fg=self.text_color, insertbackground=self.text_color, relief='flat', bd=0)
+        self.input_entry.pack(side='left', fill='x', expand=True)
+        self.input_entry.bind('<Return>', lambda e: self.execute_input())
+        tk.Button(input_frame, text="Execute", command=self.execute_input, bg=self.button_bg, fg=self.button_fg).pack(side='left', padx=6)
 
-        # Output
-        self.output_text = scrolledtext.ScrolledText(
-            main_frame, wrap='word', font=('Consolas', 10),
-            bg=self.bg_color, fg=self.text_color,
-            insertbackground=self.text_color, relief='flat',
-            padx=10, pady=10
-        )
-        self.output_text.pack(fill='both', expand=True, pady=(0, 10))
+        # Right: history & activity
+        right = tk.Frame(content, width=320, bg=self.bg_color)
+        right.pack(side='right', fill='y')
 
-        # Welcome
-        welcome = f"""
-================================================================================
-                                SPEAK SHELL
-================================================================================
+        tk.Label(right, text="History", bg=self.bg_color, fg=self.warn_fg, font=('Consolas', 11, 'bold')).pack(anchor='nw', padx=6, pady=(2,0))
+        self.history_listbox = tk.Listbox(right, height=10, bg='#111111', fg='#AAAAAA', activestyle='dotbox')
+        self.history_listbox.pack(fill='x', padx=6, pady=(0,6))
+        self.history_listbox.bind('<Double-1>', self._on_history_double)
 
-Voice Recognition: {"READY" if self.voice_enabled else "DISABLED"}
-Engine: Google Speech Recognition API (Optimized)
+        tk.Label(right, text="Activity Log", bg=self.bg_color, fg=self.text_color, font=('Consolas', 10, 'bold')).pack(anchor='nw', padx=6)
+        self.activity_listbox = tk.Listbox(right, height=12, bg='#111111', fg='#CCCCCC')
+        self.activity_listbox.pack(fill='both', expand=True, padx=6, pady=(0,6))
 
-ENHANCEMENTS:
- • Voice feedback (TTS) toggle
- • Windows toast notifications
- • Safer execution with confirmations
- • Extended navigation: "go to <dir>", "cd <path>", rename/move/copy
- • Battery and network information
- • Proper mapping for time/date queries
+        # Bottom status
+        status = tk.Frame(self.root, bg=self.bg_color)
+        status.pack(fill='x')
+        self.status_label = tk.Label(status, text="Status: Ready", font=('Consolas', 10), bg=self.bg_color, fg=self.ok_fg)
+        self.status_label.pack(side='left', padx=6)
+        self.cwd_label = tk.Label(status, text=f"CWD: {self.cwd}", font=('Consolas', 9), bg=self.bg_color, fg='#00CED1')
+        self.cwd_label.pack(side='right', padx=6)
 
-Type commands below or click 'Start Listening' for voice input.
-
-================================================================================
+        # welcome
+        welcome = """
+Speak Shell — type commands or use voice. Use the toolbar to calibrate mic or toggle theme.
 """
         self.output_text.insert('1.0', welcome)
         self.output_text.see('end')
 
-        if not self.voice_enabled:
-            self.print_output("\nERROR: Dependencies missing!")
-            self.print_output("Install: pip install SpeechRecognition pyaudio")
+        # expose controls
+        self.engine_var.trace_add('write', lambda *a: setattr(self, 'recognition_engine', self.engine_var.get()))
 
-        # Input
-        input_frame = tk.Frame(main_frame, bg=self.bg_color)
-        input_frame.pack(fill='x')
+        # sliders for advanced tuning
+        tuning = tk.Frame(right, bg=self.bg_color)
+        tuning.pack(fill='x', padx=6, pady=6)
+        tk.Label(tuning, text="Mic Energy", bg=self.bg_color, fg=self.text_color).pack(anchor='w')
+        self.energy_slider = tk.Scale(tuning, from_=100, to=1000, orient='horizontal', bg=self.bg_color, fg=self.text_color, troughcolor='#222222', command=self._on_energy_change)
+        self.energy_slider.set(self.energy_threshold)
+        self.energy_slider.pack(fill='x')
+        tk.Label(tuning, text="Phrase time limit (s)", bg=self.bg_color, fg=self.text_color).pack(anchor='w')
+        self.phrase_slider = tk.Scale(tuning, from_=2, to=12, orient='horizontal', bg=self.bg_color, fg=self.text_color, troughcolor='#222222', command=self._on_phrase_change)
+        self.phrase_slider.set(self.phrase_time_limit)
+        self.phrase_slider.pack(fill='x')
 
-        prompt = tk.Label(
-            input_frame, text=">",
-            font=('Consolas', 12, 'bold'),
-            bg=self.bg_color, fg=self.button_fg
-        )
-        prompt.pack(side='left', padx=(0, 5))
-
-        self.input_entry = tk.Entry(
-            input_frame, font=('Consolas', 12),
-            bg=self.bg_color, fg=self.text_color,
-            insertbackground=self.text_color, relief='flat', bd=0
-        )
-        self.input_entry.pack(side='left', fill='x', expand=True)
-        self.input_entry.bind('<Return>', lambda e: self.execute_input())
+        # ensure focus
         self.input_entry.focus_set()
 
-        execute_btn = tk.Button(
-            input_frame, text="Execute",
-            command=self.execute_input, font=('Consolas', 10),
-            bg=self.button_bg, fg=self.button_fg, width=10, relief='raised', bd=2
-        )
-        execute_btn.pack(side='left', padx=(5, 0))
+    # --- UI callbacks and helpers ---
+    def toggle_theme(self):
+        # Simple theme toggle between dark and light
+        if self.bg_color == '#000000':
+            self.bg_color = '#FFFFFF'
+            self.text_color = '#000000'
+            self.button_bg = '#EEEEEE'
+            self.button_fg = '#003300'
+            self.warn_fg = '#AA7700'
+            self.ok_fg = '#006600'
+        else:
+            self.bg_color = '#000000'
+            self.text_color = '#FFFFFF'
+            self.button_bg = '#2d2d2d'
+            self.button_fg = '#00FF00'
+            self.warn_fg = '#FFFF00'
+            self.ok_fg = '#00FF00'
+        # Apply to some widgets
+        try:
+            self.output_text.config(bg=self.bg_color, fg=self.text_color, insertbackground=self.text_color)
+            self.input_entry.config(bg=self.bg_color, fg=self.text_color)
+            self.status_label.config(bg=self.bg_color, fg=self.ok_fg)
+            self.cwd_label.config(bg=self.bg_color)
+        except Exception:
+            pass
+
+    def calibrate_mic(self):
+        if sr is None or self.recognizer is None:
+            messagebox.showinfo("Calibrate", "SpeechRecognition not available")
+            return
+        # Run a short calibration on a background thread to avoid blocking UI
+        def _cal():
+            try:
+                with sr.Microphone(sample_rate=16000) as src:
+                    self.root.after(0, self.print_output, "[Calibrate] Listening to ambient noise for 2s...")
+                    self.recognizer.adjust_for_ambient_noise(src, duration=2)
+                    # update energy threshold in UI
+                    self.energy_threshold = getattr(self.recognizer, 'energy_threshold', self.energy_threshold)
+                    self.root.after(0, lambda: self.energy_slider.set(self.energy_threshold))
+                    self.root.after(0, self.print_output, f"[Calibrate] Done. energy_threshold={self.energy_threshold}")
+            except Exception as e:
+                self.root.after(0, self.print_output, f"[Calibrate] Error: {e}")
+        threading.Thread(target=_cal, daemon=True).start()
+
+    def _on_energy_change(self, val):
+        try:
+            v = int(val)
+            self.energy_threshold = v
+            if self.recognizer:
+                try:
+                    self.recognizer.energy_threshold = v
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    def _on_phrase_change(self, val):
+        try:
+            v = int(val)
+            self.phrase_time_limit = v
+        except Exception:
+            pass
+
+    def _on_history_double(self, event):
+        try:
+            sel = self.history_listbox.curselection()
+            if sel:
+                cmd = self.history_listbox.get(sel[0])
+                # run the command again
+                self.input_entry.delete(0, tk.END)
+                self.input_entry.insert(0, cmd)
+                self.execute_input()
+        except Exception:
+            pass
 
     def speak(self, text):
         if getattr(self, 'tts_var', None) and self.tts_var.get() and self.tts_engine:
@@ -314,9 +350,21 @@ Type commands below or click 'Start Listening' for voice input.
             while self.is_listening:
                 try:
                     self.root.after(0, self.status_label.config, {"text": "Status: LISTENING | Speak clearly...", "fg": self.warn_fg})
-                    audio = self.recognizer.listen(source, timeout=10, phrase_time_limit=7)
+                    audio = self.recognizer.listen(source, timeout=getattr(self, 'listen_timeout', 10), phrase_time_limit=getattr(self, 'phrase_time_limit', 7))
                     self.root.after(0, self.status_label.config, {"text": "Status: PROCESSING with high accuracy...", "fg": "#00FFFF"})
-                    text = self.recognizer.recognize_google(audio, language='en-US', show_all=False)
+
+                    # Choose recognition engine dynamically
+                    recognized = None
+                    try:
+                        if getattr(self, 'recognition_engine', 'google') == 'sphinx' and hasattr(self.recognizer, 'recognize_sphinx'):
+                            recognized = self.recognizer.recognize_sphinx(audio)
+                        else:
+                            recognized = self.recognizer.recognize_google(audio, language='en-US', show_all=False)
+                    except Exception as recog_err:
+                        # Pass through to outer handlers
+                        raise recog_err
+
+                    text = recognized
                     if text and len(text) > 0:
                         self.root.after(0, self.print_output, f"[Voice] Recognized: {text}")
                         self.root.after(0, self.process_command, text, "voice")
@@ -344,6 +392,13 @@ Type commands below or click 'Start Listening' for voice input.
     def process_command(self, command, source="manual"):
         command = command.strip()
         self.print_output(f"\n> {command}")
+        # record to history UI
+        try:
+            self.command_history.append(command)
+            if hasattr(self, 'history_listbox'):
+                self.history_listbox.insert('end', command)
+        except Exception:
+            pass
         self.log_activity(source.upper(), command)
 
         # Exit flow
@@ -814,6 +869,14 @@ Available Commands:
     def log_activity(self, activity_type, message):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.activity_log.append(f"[{timestamp}] [{activity_type}] {message}")
+        # also mirror into activity listbox if present
+        try:
+            if hasattr(self, 'activity_listbox'):
+                self.activity_listbox.insert('end', f"[{activity_type}] {message}")
+                # keep bottom visible
+                self.activity_listbox.yview_moveto(1.0)
+        except Exception:
+            pass
 
     def save_log(self):
         try:
